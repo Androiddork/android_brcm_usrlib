@@ -187,7 +187,10 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
 
     job_status.job_status = V3D_JOB_STATUS_INVALID;
     job_status.timeout = -1;
-    job_status.job_id = 0;
+    job_status.job_id = 0;	
+    job.outputType = opMemoryHandle;
+    V3dMemoryHandle mem_h;
+    job.output.handle = mem_h;
     if (ioctl(fdV3d, V3D2_COMPILE_CL,&theJob) < 0) {
         LOGE("ioctl [0x%x] failed \n", V3D2_COMPILE_CL);
     }
