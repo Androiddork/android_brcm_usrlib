@@ -17,6 +17,7 @@
 #ifeq ($(strip $(BOARD_HAVE_BRCM_DAG)),true)
 
 MSP_HOME:= $(BRCM_ROOTDIR)
+BRCM_V3D_OPT:= true
 
 include $(all-subdir-makefiles)
 #endif # ifeq ($(strip $(BOARD_HAVE_BRCM_DAG)),true)
