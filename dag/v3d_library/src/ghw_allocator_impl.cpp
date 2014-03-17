@@ -32,19 +32,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 extern "C" {
 
-#ifdef USE_BRALLOC
-#include "bralloc.h"
-#endif
 
-#ifdef USE_BMEM
-#include "bcm_gememalloc_ioctl.h"
+#include "v3d2.h"
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#define DEVICE_NAME "/dev/gememalloc"
+#define DEVICE_NAME "/dev/v3d2"
 
-#endif
 
 };
 namespace ghw {
@@ -65,18 +60,10 @@ int GhwAllocatorDevice::count = 0;
 int GhwAllocatorImpl::count = 0;
 
 GhwAllocatorDevice::GhwAllocatorDevice() :mFd(-1) {
-#ifdef PC_BUILD
-	mFd =1;
-#endif
-#ifdef USE_BRALLOC
-	mFd =1;
-#endif
-#ifdef USE_BMEM
-	mFd = open(DEVICE_NAME, O_RDWR | O_SYNC);
+	mFd = open(DEVICE_NAME, O_RDWR);
 	if(mFd <= 0 ) {
 		LOGE("GhwAllocatorDevice device open failed for %s\n",DEVICE_NAME);
-		}
-#endif
+	}
 	count++;
 	pthread_mutex_init(&mLock,NULL);
 }
@@ -96,74 +83,50 @@ int GhwAllocatorDevice::initCheck() {
 }
 
 void* GhwAllocatorDevice::allocDevMem(u32& pa, unsigned char*& va,u32 size) {
-#ifdef PC_BUILD
-    va = new unsigned char[size];
-    pa = ((u32)va) | 0x80000000;
-    return new unsigned char;
-#endif
-#ifdef USE_BRALLOC
-	void* bralloc_bufHandle = NULL;
-	if(mMode&GhwMemAllocator::GHW_MEM_ALLOC_CACHED)
-		bralloc_alloc(size,4096,BRALLOC_USAGE_HW_CACHED,&bralloc_bufHandle);
-	else
-		bralloc_alloc(size,4096,BRALLOC_USAGE_SW_NOT_CACHED,&bralloc_bufHandle);
-	bralloc_lock(bralloc_bufHandle,BRALLOC_LOCK_HW,0,size,(void**)(&pa));
-	bralloc_lock(bralloc_bufHandle,BRALLOC_LOCK_SW,0,size,(void**)(&va));
-    return bralloc_bufHandle;
-#endif
 
-#ifdef USE_BMEM
 	int tempSize = size;
+	int ret;
 	int pgsize = 4096;//getpagesize();
 	tempSize = (tempSize + pgsize-1) & (~(pgsize - 1));
-	GEMemallocwrapParams params;
+	struct mem_alloc_request params;
 	params.size = tempSize;
-	params.busAddress =0;
 
 	/* get memory linear memory buffers */
-	ioctl(mFd, GEMEMALLOC_WRAP_ACQUIRE_BUFFER, &params);
-	if(params.busAddress == 0)
+	
+	if(ioctl(mFd, V3D2_MEM_ALLOC, &params))
 	{
-		LOGE("GhwAllocatorDevice zero linear buffer allocated %d\n",tempSize);
+		LOGE("Alloc failed for size %d\n",tempSize);
 		return 0;
+	}
+	
+	struct V3D2MemoryReference *ref = new struct V3D2MemoryReference;
+	ref->handle = params.handle;
+	ref->phys = params.physicalAddress;
+	ref->size = params.size;
+	ref->virt = 0;
+	ref->mapcount = 0;
+	
+	ret = ioctl(v3d2_get_fd(),V3D2_MEM_SELECT,&ref->handle);
+	assert(ret == 0);
+	ref->virt = mmap(0,ref->size,PROT_READ|PROT_WRITE,MAP_SHARED,mFd,0);
+	if ((int)ref->virt == -1) {
+		printf("mmap error: %s\n",strerror(errno));
+		return NULL;
 	}
 
-	/* Map the bus address to virtual address */
-	pa = (unsigned int)params.busAddress;
-	va = (unsigned char *) mmap(0,tempSize , PROT_READ | PROT_WRITE,
-											MAP_SHARED, mFd,
-											params.busAddress);
-	if(va == (unsigned char *)0xFFFFFFFF)
-	{
-		LOGE("GhwAllocatorDevice mmap failed");
-		ioctl(mFd, GEMEMALLOC_WRAP_RELEASE_BUFFER, &pa);
-		pa = 0;
-		va = 0;
-		return 0;
-	}
-    return (void *)1;
-#endif
+    return (void *)ref->virt;
 }
 
 void GhwAllocatorDevice::freeDevMem(u32& pa, unsigned char*& va,u32 size, void* handle) {
-#ifdef PC_BUILD
-    delete []va;
-	delete handle;
-#endif
-#ifdef USE_BRALLOC
-	bralloc_free(handle);
-#endif
 
-#ifdef USE_BMEM
 	int tempSize = size;
 	int pgsize = 4096;//getpagesize();
 	tempSize = (tempSize + pgsize-1) & (~(pgsize - 1));
 
     munmap(va, tempSize);
-    ioctl(mFd, GEMEMALLOC_WRAP_RELEASE_BUFFER, &pa);
+    ioctl(mFd, V3D2_MEM_FREE, handle);
 	va = 0;
 	pa = 0;
-#endif
 
 };
 
