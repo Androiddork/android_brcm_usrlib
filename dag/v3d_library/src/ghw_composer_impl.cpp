@@ -157,10 +157,10 @@ ghw_error_e GhwComposerV3d::setName(const char *name)
 ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
     GhwMemHandle* rend_list_handle, u32 rend_size, Job* job)
 {
-#ifndef PC_BUILD
-    v3d_job_post_t job_post;
+    //v3d_job_post_t job_post;
+    JobCompileRequest theJob;
+    memset(&theJob,0,sizeof(theJob));
     v3d_job_status_t job_status;
-#endif
     u32 bin_ipa_addr, rend_ipa_addr, size;
     void *virt_addr;
     LOGT("%s[%p] fd[%d] \n", __FUNCTION__, this, fdV3d);
@@ -171,27 +171,26 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
     rend_list_handle->lock(rend_ipa_addr, virt_addr, size);
     cacheFlush();
 
-#ifndef PC_BUILD
     if (bin_list_handle) {
-        job_post.job_type = V3D_JOB_BIN_REND;
-        job_post.v3d_ct0ca = bin_ipa_addr;
-        job_post.v3d_ct0ea = bin_ipa_addr + bin_size;
+        theJob.binner.code = bin_ipa_addr;
+        theJob.binner.size = bin_size;
+        theJob.binner.run = 1;
     }else {
-        job_post.job_type = V3D_JOB_REND;
-        job_post.v3d_ct0ca = 0;
-        job_post.v3d_ct0ea = 0;
+        theJob.binner.run = 0;
+        theJob.binner.code = 0;
+        theJob.binner.size = 0;
     }
-    job_post.job_id = 0;
-    job_post.v3d_ct1ca = rend_ipa_addr;
-    job_post.v3d_ct1ea = rend_ipa_addr + rend_size;
+    theJob.jobid = 0;
+    theJob.renderer.code = rend_ipa_addr;
+    theJob.renderer.size = rend_size;
+    theJob.renderer.run = 1;
 
     job_status.job_status = V3D_JOB_STATUS_INVALID;
     job_status.timeout = -1;
     job_status.job_id = 0;
-    if (ioctl(fdV3d, V3D_IOCTL_POST_JOB, &job_post) < 0) {
-        LOGE("ioctl [0x%x] failed \n", V3D_IOCTL_POST_JOB);
+    if (ioctl(fdV3d, V3D2_COMPILE_CL,&theJob) < 0) {
+        LOGE("ioctl [0x%x] failed \n", V3D2_COMPILE_CL);
     }
-#endif
 	mList.addElement(job,0);
 
     if (bin_list_handle) {
@@ -204,17 +203,10 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
 ghw_error_e GhwComposerV3d::waitJobCompletion()
 {
     LOGT("%s[%p] fd[%d] \n", __FUNCTION__, this, fdV3d);
-#ifndef PC_BUILD
-    v3d_job_status_t job_status;
-
+    struct JobStatusPacket status;
     /* Wait for all v3d jobs submitted from this session */
-    job_status.job_status = V3D_JOB_STATUS_INVALID;
-    job_status.timeout = -1;
-    if (ioctl(fdV3d, V3D_IOCTL_WAIT_JOB, &job_status) < 0) {
-        LOGE("%s[%p] ioctl[0x%x] failed \n", __FUNCTION__, this, V3D_IOCTL_WAIT_JOB);
-    }
-    LOGV_IF((job_status.job_status != V3D_JOB_STATUS_SUCCESS), "%s[%p] job status[%d] \n", __FUNCTION__, this, job_status.job_status);
-#endif
+    status.jobid = 0;
+    read(v3d2_get_fd(),&status,sizeof(status));
     return GHW_ERROR_NONE;
 }
 
