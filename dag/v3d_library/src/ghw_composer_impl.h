@@ -75,7 +75,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 
-#define V3D_DEVICE "/dev/v3d"
+#define V3D_DEVICE "/dev/v3d2"
 
 #ifndef MAX
 #define MAX(A,B)      ((A) < (B) ? (B) : (A))
