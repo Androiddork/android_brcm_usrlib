@@ -161,7 +161,7 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
     JobCompileRequest theJob;
     memset(&theJob,0,sizeof(theJob));
     v3d_job_status_t job_status;
-    u32 bin_ipa_addr, rend_ipa_addr, size;
+    u32 bin_ipa_addr, rend_ipa_addr, size, ipa_addr;
     void *virt_addr;
     LOGT("%s[%p] fd[%d] \n", __FUNCTION__, this, fdV3d);
 
@@ -170,7 +170,32 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
     }
     rend_list_handle->lock(rend_ipa_addr, virt_addr, size);
     cacheFlush();
-
+    
+	struct mem_alloc_request params;
+	params.size = size;
+	
+	/* get memory linear memory buffers */
+	
+	if(ioctl(fdV3d, V3D2_MEM_ALLOC, &params))
+	{
+		LOGE("Alloc failed for size %d\n",tempSize);
+		return 0;
+	}
+	
+	struct V3D2MemoryReference *ref = new struct V3D2MemoryReference;
+	ref->handle = params.handle;
+	ref->phys = params.physicalAddress;
+	ref->size = params.size;
+	ref->virt = 0;
+	ref->mapcount = 0;
+	
+	ret = ioctl(fdV3d,V3D2_MEM_SELECT,&ref->handle);
+	assert(ret == 0);
+	ref->virt = mmap(0,ref->size,PROT_READ|PROT_WRITE,MAP_SHARED,mFd,0);
+	if ((int)ref->virt == -1) {
+		printf("mmap error: %s\n",strerror(errno));
+		return GHW_ERROR_FAIL;
+	}
     if (bin_list_handle) {
         theJob.binner.code = bin_ipa_addr;
         theJob.binner.size = bin_size;
@@ -188,9 +213,8 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
     job_status.job_status = V3D_JOB_STATUS_INVALID;
     job_status.timeout = -1;
     job_status.job_id = 0;	
-    job.outputType = opMemoryHandle;
-    V3dMemoryHandle mem_h;
-    job.output.handle = mem_h;
+    theJob.outputType = opMemoryHandle;
+    theJob.output.handle = ref->handle;
     if (ioctl(fdV3d, V3D2_COMPILE_CL,&theJob) < 0) {
         LOGE("ioctl [0x%x] failed \n", V3D2_COMPILE_CL);
     }
