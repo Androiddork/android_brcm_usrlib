@@ -12,7 +12,8 @@ LOCAL_CFLAGS:= -DLOG_TAG=\"V3d_Library\" -DBRCM_USE_BMEM
 
 LOCAL_SHARED_LIBRARIES := libutils
 
-LOCAL_SRC_FILES:= src/ghw_allocator_impl.cpp src/ghw_memblock.cpp src/ghw_composer_impl.cpp
+LOCAL_SRC_FILES:= src/ghw_allocator_impl.cpp src/ghw_memblock.cpp 
+#src/ghw_composer_impl.cpp
 
 ifeq ($(USE_BMEM),true)
 	LOCAL_CFLAGS+= -DUSE_BMEM
