@@ -172,7 +172,7 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
     cacheFlush();
     
 	struct mem_alloc_request params;
-	params.size = size;
+	params.size = (bin_size + rend_size);
 	
 	/* get memory linear memory buffers */
 	
@@ -191,7 +191,7 @@ ghw_error_e GhwComposerV3d::postJob(GhwMemHandle* bin_list_handle, u32 bin_size,
 	
 	ret = ioctl(fdV3d,V3D2_MEM_SELECT,&ref->handle);
 	assert(ret == 0);
-	ref->virt = mmap(0,ref->size,PROT_READ|PROT_WRITE,MAP_SHARED,mFd,0);
+	ref->virt = mmap(0,ref->size,PROT_READ|PROT_WRITE,MAP_SHARED,fdV3d,0);
 	if ((int)ref->virt == -1) {
 		printf("mmap error: %s\n",strerror(errno));
 		return GHW_ERROR_FAIL;
